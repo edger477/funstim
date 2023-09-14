@@ -1,0 +1,357 @@
+<div class="container">
+  <h1>Apply volume ramp from funscript to mp3 file</h1>
+  <hr>
+  <h3>Settings</h3>
+  <div class="row">
+    <div class="form col-6">
+      <div class="form-group">
+        <label class="form-label">Configure how to map funscript position to the audio volume</label>
+        <table class="table table-striped table-bordered" style="width: 600px;">
+          <thead>
+            <tr>
+              <th>Volume Mapping for position</th>
+              <th>Volume at 0</th>
+              <th>Funscript threshold position</th>
+              <th>Volume at funscript threshold</th>
+              <th>Volume at 100</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>Value</th>
+              <td>
+                <input id="vol_at_0" type="number" min="0" max="100" value="0" />
+              </td>
+              <td>
+                <input id="funscript_threshold" type="number" min="0" max="100" value="5" />
+              </td>
+              <td>
+                <input id="vol_at_threshold" type="number" min="0" max="100" value="80" />
+              </td>
+              <td>
+                <input id="vol_at_100" type="number" min="0" max="100" value="100" />
+              </td>
+            </tr>
+            <tr>
+              <th>Reset</th>
+              <td colspan="2">
+                <input type="button" title="Defaults" value="Defaults" onclick="resetMapping()">
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>      
+      <div class="form-group">
+        <label class="form-label">Fade in/out</label>
+        <select class="form-control" id="fade">
+          <option value="0">Disabled</option>
+          <option value="1000">1 second</option>
+          <option value="2000">2 seconds</option>
+          <option value="5000" selected>5 seconds</option>
+        </select>
+      </div>
+      <div class="form-check ml-2">
+        <input class="form-check-input" type="checkbox" id="polarity">
+        <label class="form-check-label">Inverted</label>
+      </div>
+      <div class="form-check ml-2">
+        <input class="form-check-input" checked type="checkbox" id="fullrange">
+        <label class="form-check-label">Expand to full range</label>
+      </div>
+      <div class="form-check ml-2">
+        <input class="form-check-input" checked type="checkbox" id="fadeonpause">
+        <label class="form-check-label">Fade in/out during low sections</label>
+      </div>
+      <div class="form-check ml-2">
+        <input class="form-check-input" type="checkbox" id="debug">
+        <label class="form-check-label">Output amplitude & phase envelopes (FOR TESTING ONLY)</label>
+      </div>
+    </div>
+  </div>
+  <hr>
+  <h3>Select .funscript file to be used for volume</h3>
+  <input type="file" id="file-funscript" multiple>
+  
+  <h3>Select .mp3 file to be used as source</h3>
+  <input type="file" id="file-mp3" multiple>
+  <hr>
+  <div id="progress"></div>
+</div>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
+  integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
+<script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
+  integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js"
+  integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"
+  integrity="sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy" crossorigin="anonymous"></script>
+  <script src="./lame.min.js" type="text/javascript" ></script>
+<script>
+  function resetMapping(e) {
+    document.getElementById('vol_at_0').value = 0;
+    document.getElementById('funscript_threshold').value = 5;
+    document.getElementById('vol_at_threshold').value = 80;
+    document.getElementById('vol_at_100').value = 100;
+  }
+  function updateRow(row, text, status, closeable) {
+    row.className = "alert alert-" + status + " " + (closeable ? "alert-dismissible " : "") + "fade show";
+    row.innerHTML = text + (closeable ? "<button type='button' class='close' data-dismiss='alert'><span>&times;</span></button>" : "");
+  }
+
+  function readFiles(e) {
+    let progress = document.getElementById('progress');
+    var mp3Input = document.getElementById('file-mp3');
+    
+    if(!mp3Input.files) return;
+
+
+    for (let file of e.target.files) {
+      let fileName = file.name.split(".").slice(0, -1).join(".");
+      let reader = new FileReader();
+
+      let row = document.createElement('div');
+      updateRow(row, "0% - " + fileName, "primary", false);
+
+      progress.appendChild(row);
+
+      reader.onload = event => {
+        let msg = {};
+
+        msg.bitrate = 192;
+        msg.amplitude = 0.9;
+        msg.polarity = document.getElementById('polarity').checked ? 1 : -1;
+        msg.fullrange = document.getElementById('fullrange').checked;
+        msg.debug = document.getElementById('debug').checked;
+        msg.volumeMap = {
+        };
+        msg.volumeMap.vol_at_0 = document.getElementById('vol_at_0').value / 100.0;
+        msg.volumeMap.funscript_threshold = document.getElementById('funscript_threshold').value / 100.0;
+        msg.volumeMap.vol_at_threshold = document.getElementById('vol_at_threshold').value / 100.0;
+        msg.volumeMap.vol_at_100 = document.getElementById('vol_at_100').value / 100.0;
+
+        msg.fade = document.getElementById('fade').value;
+        msg.fadeonpause = document.getElementById('fadeonpause').checked;
+        msg.funscript = event.target.result;
+        msg.mp3 = mp3Input.files[0]
+        let worker = new Worker("./funstim.js");
+
+        worker.onmessage = m => {
+          m = m.data;
+          updateRow(row, m.pctDone + "% - " + fileName, m.status, m.pctDone == 100);
+
+          if (m.mp3Data) {
+            download(fileName + ".mp3", m.mp3Data);
+            document.getElementById('file-mp3').value = "";
+            document.getElementById('file-funscript').value = "";
+          }
+        };
+
+        worker.onerror = e => {
+          console.log(e);
+          updateRow(row, "Error - " + fileName + ": " + e.message, "danger", true);
+        };;
+
+        var ctx = new AudioContext();
+        
+        var mp3Reader = new FileReader();
+        mp3Reader.onload = event => {
+            var mp3data = event.target.result;
+
+            ctx.decodeAudioData(mp3data, (buf)=>{
+              msg.mp3Data = buf;
+              
+              msg.fileName = fileName;
+              processAudio(msg);
+              
+            });
+
+        }
+        mp3Reader.readAsArrayBuffer(msg.mp3);
+
+
+      };
+      reader.readAsText(file);
+    }
+
+  }
+
+  document.getElementById('file-funscript').addEventListener('change', readFiles, false);
+
+  function download(filename, text) {
+    let blob = new Blob(text, {
+      type: "audio/mp3"
+    });
+    let link = document.createElement('a');
+    link.href = window.URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function cloneAudioBuffer(fromAudioBuffer) {
+  const audioBuffer = {
+    length:fromAudioBuffer.length, 
+    numberOfChannels:fromAudioBuffer.numberOfChannels, 
+    sampleRate:fromAudioBuffer.sampleRate,
+    channels: {}
+  };
+  for(let channelI = 0; channelI < audioBuffer.numberOfChannels; ++channelI) {
+    const samples = fromAudioBuffer.getChannelData(channelI);
+    audioBuffer.channels[channelI] = samples;
+  }
+  return audioBuffer;
+}
+
+function processAudio(e){
+  
+    let msg = {};
+
+    let volumeMap = e.volumeMap;
+
+    let getVolume = function (position) {
+      let result = position;
+      let dynamicRange = 0, funscriptRange = 0, funscriptRelativePos = 0;
+      if(position <= volumeMap.funscript_threshold){
+        dynamicRange = volumeMap.vol_at_threshold;
+        funscriptRange = volumeMap.funscript_threshold;
+        funscriptRelativePos = position;
+        result = (dynamicRange * funscriptRelativePos / funscriptRange);
+      }
+      else{
+        dynamicRange = volumeMap.vol_at_100 - volumeMap.vol_at_threshold;
+        funscriptRange = 1 - volumeMap.funscript_threshold;
+        funscriptRelativePos = position - volumeMap.funscript_threshold;
+        result = volumeMap.vol_at_threshold + (dynamicRange * funscriptRelativePos / funscriptRange);
+      }
+      return result;
+    }
+
+    msg.pctDone = 0;
+    msg.status = "primary";
+
+    let fs = JSON.parse(e.funscript);
+
+    if (!fs.actions || fs.actions.length == 0) {
+        throw "No actions defined in funscript";
+    }
+
+    if (fs.inverted) {
+        e.polarity = -e.polarity;
+    }
+
+    let actions = fs.actions;
+    let length = actions.slice(-1).pop().at;
+
+    if (e.fullrange) {
+        let min = actions.map(a => a.pos).reduce((a, c) => (a < c ? a : c), 100);
+        let max = actions.map(a => a.pos).reduce((a, c) => (a > c ? a : c), 0);
+
+        actions = actions.map(a => ({ pos: ((a.pos - min) / (max - min)) * 100, at: a.at }));
+    }
+    if (e.nor_min > 0 || e.nor_max < 100) {
+        let min = e.nor_min, max = e.nor_max;
+        actions = actions.map(a => ({ pos: (min + (a.pos * (max - min) / 100)) , at: a.at }));
+    }
+    
+
+    let mp3encoder = new lamejs.Mp3Encoder(e.mp3Data.numberOfChannels, e.mp3Data.sampleRate, e.bitrate);
+    let mp3Data = [];
+
+    let sampleBlockSize = 1152;
+    let left = new Int16Array(sampleBlockSize);
+    let right = new Int16Array(sampleBlockSize);
+
+    let samplesPerMs = e.mp3Data.sampleRate / 1000;
+    let calibrationSamples = samplesPerMs * 30000;
+    let fadeIn = samplesPerMs * 10000;
+    let normalSamples = length * samplesPerMs;
+    let fadeSamples = e.fade * samplesPerMs;
+    let totalSamples = normalSamples + fadeSamples * 2;
+    let sample = 0;
+    let actionIndex = 0;
+
+    actions = actions.map(a => ({ at: a.at * samplesPerMs, pos: a.pos / 100 }));
+
+    let a1 = actions[0];
+    let a0 = a1;
+
+    let channel1Data = e.mp3Data.getChannelData(0);
+    let channel2Data = e.mp3Data.getChannelData(1);
+
+    let lastVolume = 0;
+    let maxChangePerSample = 1 / fadeSamples;
+
+    while (sample < totalSamples) {
+        for (let i = 0; i < sampleBlockSize; i++) {
+            if (a1.at < sample && actionIndex < actions.length - 1) {
+                a0 = a1;
+                actionIndex++;
+                a1 = actions[actionIndex];
+            }
+
+            let dist = a1.at - a0.at;
+            let dpos = a1.pos - a0.pos;
+
+            let alpha = Math.max(0, Math.min(1, (sample - a0.at) / dist)) || 0;
+            let pos = Math.max(0, Math.min(1, a0.pos + dpos * alpha));
+
+            if(sample < calibrationSamples){
+              if(sample < fadeIn){
+                pos = sample/fadeIn;
+              }
+              else{
+                pos = volumeMap.vol_at_threshold;
+              }
+            }
+
+            let vol = getVolume(pos);
+            if(vol > lastVolume && vol > lastVolume + maxChangePerSample){
+              lastVolume = vol = lastVolume + maxChangePerSample;
+            }
+            else if(vol < lastVolume && vol < lastVolume - maxChangePerSample){
+              lastVolume = vol = lastVolume - maxChangePerSample;
+            }
+            
+
+            left[i] = channel1Data[sample] * 32767 * vol * e.amplitude;
+            right[i] = channel2Data[sample] * 32767 * vol * e.amplitude;
+
+            if (e.debug) {
+                left[i] = ((vol * 2) - 1) * 32767;
+                right[i] = ((vol * 2) - 1) * 32767;
+            }
+
+            sample++;
+        }
+
+        let mp3buf = mp3encoder.encodeBuffer(left, right);
+        if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+        }
+
+        let newPct = Math.trunc((sample / totalSamples) * 100);
+
+        if (newPct > msg.pctDone) {
+            msg.pctDone = newPct;
+
+            //postMessage(msg);
+        }
+    }
+
+    let mp3buf = mp3encoder.flush();
+
+    if (mp3buf.length > 0) {
+        mp3Data.push(mp3buf);
+    }
+
+    
+    download(e.fileName + ".mp3", mp3Data);
+    msg.pctDone = 100;
+    msg.status = "success";
+
+    //postMessage(msg);
+
+    //close();
+}
+</script>
