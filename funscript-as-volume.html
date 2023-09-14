@@ -68,14 +68,17 @@
       </div>
     </div>
   </div>
-  <hr>
-  <h3>Select .funscript file to be used for volume</h3>
-  <input type="file" id="file-funscript" multiple>
-  
-  <h3>Select .mp3 file to be used as source</h3>
+  <h3>1st select .mp3 file to be used as source</h3>
   <input type="file" id="file-mp3" multiple>
   <hr>
+  <hr>
+  <h3>2nd, select .funscript file to be used for volume (after selecting mp3 above)</h3>
+  <input type="file" id="file-funscript" multiple>
+  
   <div id="progress"></div>
+
+  
+  <h3>Note that page will freeze during processing, it is normal, since browser does not allow to pass the audio context with contents of mp3 file to a thread to process it in background</h3>
 </div>
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"
   integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
